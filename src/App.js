@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './App.css'; 
 
 function App() {
@@ -9,6 +9,8 @@ function App() {
   const [startPos, setStartPos] = useState({ x: 0, y: 0 }); // Start position
   const [currentBox, setCurrentBox] = useState(null); // Current bounding box
   const canvasRef = useRef(null); // Canvas ref for drawing
+  const [undoStack, setUndoStack] = useState([]); // Undo history
+  const [redoStack, setRedoStack] = useState([]); // Redo history
 
   // Handle image upload
   const handleImageUpload = (e) => {
@@ -45,7 +47,12 @@ function App() {
   // Handle mouse up (finish drawing)
   const handleMouseUp = () => {
     if (isDrawing && currentBox) {
-      setAnnotations((prev) => [...prev, currentBox]);
+      setAnnotations((prev) => {
+        const newAnnotations = [...prev, currentBox];
+        setUndoStack([...undoStack, prev]); // Push current state to undo stack
+        setRedoStack([]); // Clear redo stack when a new action is taken
+        return newAnnotations;
+      });
       setCurrentBox(null);
     }
     setIsDrawing(false);
@@ -72,6 +79,65 @@ function App() {
     downloadAnchor.click();
     downloadAnchor.remove();
   };
+
+  // Handle undo action
+  const handleUndo = () => {
+    if (undoStack.length > 0) {
+      const lastState = undoStack.pop(); // Get the last state
+      setRedoStack([annotations, ...redoStack]); // Push current state to redo stack
+      setAnnotations(lastState); // Restore the last state
+      setUndoStack(undoStack); // Update the undo stack
+    }
+  };
+
+  // Handle redo action
+  const handleRedo = () => {
+    if (redoStack.length > 0) {
+      const nextState = redoStack.shift(); // Get the next state
+      setUndoStack([...undoStack, annotations]); // Push current state to undo stack
+      setAnnotations(nextState); // Restore the next state
+      setRedoStack(redoStack); // Update the redo stack
+    }
+  };
+
+  // Keyboard shortcuts for labels
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      switch (e.key) {
+        case '1':
+          setCurrentLabel('b'); // Button
+          break;
+        case '2':
+          setCurrentLabel('i'); // Input
+          break;
+        case '3':
+          setCurrentLabel('s'); // Select
+          break;
+        case '4':
+          setCurrentLabel('t'); // Text
+          break;
+        case '5':
+          setCurrentLabel('img'); // Image
+          break;
+        case '6':
+          setCurrentLabel('l'); // Link
+          break;
+        case 'z':
+          if (e.ctrlKey) handleUndo(); // Ctrl+Z for undo
+          break;
+        case 'y':
+          if (e.ctrlKey) handleRedo(); // Ctrl+Y for redo
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [undoStack, redoStack, annotations]);
 
   return (
     <div className="flex flex-col items-center justify-center p-4 bg-gray-100 h-screen">
@@ -104,6 +170,18 @@ function App() {
           className="ml-4 p-2 bg-blue-500 text-white rounded"
         >
           Download Annotations
+        </button>
+        <button
+          onClick={handleUndo}
+          className="ml-4 p-2 bg-yellow-500 text-white rounded"
+        >
+          Undo
+        </button>
+        <button
+          onClick={handleRedo}
+          className="ml-4 p-2 bg-green-500 text-white rounded"
+        >
+          Redo
         </button>
       </div>
 
@@ -168,21 +246,15 @@ const getColorForLabel = (label) => {
     case 'i':
       return 'border-green-500';
     case 's':
-      return 'border-blue-500';
+      return 'border-yellow-500';
     case 't':
-      return 'border-orange-500';
+      return 'border-blue-500';
     case 'img':
       return 'border-purple-500';
     case 'l':
-      return 'border-yellow-500';
-    case 'li':
       return 'border-pink-500';
-    case 'active-i':
-      return 'border-teal-500';
-    case 'active-s':
-      return 'border-indigo-500';
     default:
-      return 'border-black';
+      return 'border-gray-500';
   }
 };
 
